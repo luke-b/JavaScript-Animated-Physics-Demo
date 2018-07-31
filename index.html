@@ -1,0 +1,523 @@
+<html>
+<head>
+	<title>JS Physics Demo</title>
+</head>
+
+<script>
+
+
+Node.prototype.x = 0;
+Node.prototype.y = 0;
+
+Node.prototype.dx = 0;
+Node.prototype.dy = 0;
+
+Node.prototype.index = 0;
+
+Node.prototype.ELESTICITY_FAC = -0.6;
+Node.prototype.FRICTION_FAC = 0.995;
+
+Node.prototype.fixed = false;
+Node.prototype.thickness = 0;
+
+
+function Node(x,y,index,fixed) {
+
+	this.x = x;
+	this.y = y;
+
+	this.fixed = fixed;
+
+	this.index = index;
+}
+
+Node.prototype.addVector = function(ddx,ddy) {
+
+	if (!this.fixed) {
+		this.dx += ddx;
+		this.dy += ddy;
+	}
+
+}
+
+Node.prototype.move = function(percentage) {
+
+	if (!this.fixed) {
+		this.x += this.dx * percentage;
+		this.y += this.dy * percentage;
+
+		if (this.y > 470) {
+			this.y = 470.0;
+			this.dy *= this.ELESTICITY_FAC;
+		}
+
+		if (this.x < 10) {
+			this.x = 10;
+			this.dx *= this.ELESTICITY_FAC;
+		}
+
+		if (this.x > 630) {
+			this.x = 630;
+			this.dx *= this.ELESTICITY_FAC;
+		}
+
+		this.dx *= this.FRICTION_FAC;
+		this.dy *= this.FRICTION_FAC;
+	}
+}
+
+Node.prototype.render = function(g) {
+
+	if (this.index<47) {
+
+		g.fillStyle = "rgb(200,0,0)";
+		g.fillRect (this.x-this.thickness,this.y-this.thickness, this.thickness*2,this.thickness*2);
+
+	} else {
+		g.save();
+		g.translate(this.x,this.y);
+		g.drawImage(smokeImage,-this.thickness,-this.thickness,this.thickness*2,this.thickness*2);
+		g.restore();
+
+	}
+}
+
+//-----------------------------------------
+
+
+Constraint.prototype.elesticity = 1;
+Constraint.prototype.length = 0;
+Constraint.prototype.nodeA = null;
+Constraint.prototype.nodeB = null;
+
+Constraint.AUTO_LENGTH = -999;
+
+function Constraint(nodeA,nodeB, length, elasticity) {
+
+	this.nodeA = nodeA;
+	this.nodeB = nodeB;
+	this.length = length;
+	this.elasticity = elasticity;
+
+	if (length == Constraint.AUTO_LENGTH) {
+
+		this.length = this.getLength(nodeA, nodeB);
+
+	}
+
+}
+
+Constraint.prototype.render = function(g) {
+
+//	g.strokeStyle = "rgba(255,0,0,2.9)";
+//	g.moveTo(this.nodeA.x,this.nodeA.y);
+//	g.lineTo(this.nodeB.x,this.nodeB.y);
+//	g.stroke();
+
+
+	g.save();
+	g.translate(this.nodeA.x,this.nodeA.y);
+	g.rotate(this.calcAngle()-Math.PI/2);
+	g.drawImage(ropeImage,-2,0,4,this.calcLength()+2);
+	g.restore();
+}
+
+
+Constraint.prototype.apply = function(percentage) {
+
+//	var difA = (Math.abs(this.getLength(this.nodeA,this.nodeB) - this.length)/100)*this.elasticity;
+
+
+//	var angA = this.getAngle(this.nodeA,this.nodeB);
+//	var angB = this.getAngle(this.nodeB,this.nodeA);
+
+//	this.nodeA.addVector(-difA*percentage*Math.cos(angA),
+//			     -difA*percentage*Math.sin(angA));
+
+
+//	this.nodeB.addVector(difA*percentage*Math.cos(angB),
+//			     difA*percentage*Math.sin(angB));
+
+	this.follow(this.nodeA,this.nodeB,percentage);
+	this.follow(this.nodeB,this.nodeA,percentage);
+
+
+}
+
+Constraint.prototype.follow = function(nodeA, nodeB, p) {
+
+	var len = (this.getLength(this.nodeA, this.nodeB) - this.length)/2*0.01;
+	var ang = this.getAngle(nodeA,nodeB);
+
+//	write(len + ', ' + ang / Math.PI / 180);
+
+	var cx = nodeA.x + Math.cos(ang)*len;
+	var cy = nodeA.y + Math.sin(ang)*len;
+/*
+	var mark = document.getElementById('node5');
+	mark.style.left = cx;
+	mark.style.top = cy;
+*/
+//	var ang = this.getAngle(nodeA, nodeB);
+
+
+//	var dx = nodeB.x - nodeA.x;
+//	var dy = nodeB.y - nodeA.y;
+
+	nodeA.addVector(Math.cos(ang)*len*p ,
+			Math.sin(ang)*len*p);
+
+
+
+
+}
+
+
+Constraint.prototype.calcAngle = function() {
+	return this.getAngle(this.nodeA,this.nodeB);
+}
+
+Constraint.prototype.calcLength = function() {
+	return this.getLength(this.nodeA,this.nodeB);
+}
+
+
+
+Constraint.prototype.getLength = function(nodeA,nodeB) {
+
+	var dx = nodeA.x - nodeB.x;
+	var dy = nodeA.y - nodeB.y;
+
+	return Math.sqrt(dx*dx+dy*dy);
+
+}
+
+Constraint.prototype.getAngle = function(nodeB,nodeA) {
+
+	var dx = nodeA.x - nodeB.x;
+	var dy = nodeA.y - nodeB.y;
+
+	return Math.atan2(dy,dx);
+
+}
+
+//----------------------------------------
+
+
+Group.prototype.nodes = null;
+Group.prototype.consts = null;
+
+Group.prototype.context = null;
+
+
+function Group(nodeCount, constsCount) {
+
+	this.nodes = new Array();
+	this.consts = new Array();
+
+	var str= '';
+
+	for (var i = 0; i < nodeCount; i++) {
+
+		str += '<div id="node' + i + '" style="background-image: url(flare.png);position: absolute; width: 30; height: 30;"></div>';
+
+	}
+
+	var d = document.getElementById('test-space');
+	d.innerHTML = str;
+
+
+	 var canvas = document.getElementById('test-space');
+ 	 this.context = canvas.getContext('2d');
+
+}
+
+
+Group.prototype.addNode = function(index,x,y,fixed) {
+
+	var n = new Node(x,y,index,fixed);
+	if (this.nodes[index] == null)
+	this.nodes.push(n);
+
+}
+
+Group.prototype.addNodeVec = function(index, dx,dy) {
+
+	this.nodes[index].addVector(dx,dy);
+
+}
+
+
+Group.prototype.addConst = function(indexA,indexB) {
+
+	var a = this.nodes[indexA];
+	var b = this.nodes[indexB];
+
+	var c = new Constraint(a,b,Constraint.AUTO_LENGTH,1);
+
+	this.consts.push(c);
+
+}
+
+Group.prototype.doGravity  = function(fac) {
+
+	for (var i = 0; i < this.nodes.length; i++) {
+
+		var n = this.nodes[i];
+		n.addVector(0,fac);
+
+
+		if (i > 47)
+		this.nodes[i].thickness+= 0.2;
+
+	}
+
+}
+
+
+Group.prototype.move  = function(proc) {
+
+	for (var i = 0; i < this.nodes.length; i++) {
+
+		var n = this.nodes[i];
+		n.move(proc);
+
+	}
+
+}
+
+Group.prototype.applyConsts = function(proc) {
+
+	for (var i = 0; i < this.consts.length; i++) {
+
+		var n = this.consts[i];
+		n.apply(proc);
+
+	}
+
+}
+
+
+Group.prototype.render = function() {
+
+
+
+	for (var i = 0; i < this.nodes.length; i++) {
+
+		var n = this.nodes[i];
+		n.render(this.context);
+
+	}
+
+	for (var i = 0; i < this.consts.length; i++) {
+
+		var n = this.consts[i];
+		n.render(this.context);
+
+	}
+
+}
+
+
+Group.prototype.play = function() {
+
+	this.context.strokeStyle = 'rgb(0,0,0)';
+	this.context.fillStyle = 'rgb(255,255,255)';
+	this.context.fillRect(0,0,640,480);
+
+
+
+
+	this.doGravity(0.2);
+	this.applyConsts(180);
+	this.move(0.8);
+	this.render();
+
+
+	//this.context.save();
+	//this.context.translate(this.nodes[8].x,this.nodes[8].y);
+	//this.context.rotate(this.consts[11].calcAngle()-Math.PI/5);
+	//this.context.drawImage(shortsImage,-27,-5);
+	//this.context.restore();
+
+
+	//this.context.save();
+	//this.context.translate(this.nodes[2].x,this.nodes[2].y);
+	//this.context.rotate(this.consts[4].calcAngle()-Math.PI/2);
+	//this.context.drawImage(shirtImage,-22,-5,49,this.consts[4].calcLength()+5);
+	//this.context.restore();
+
+
+	this.context.save();
+	this.context.translate(this.nodes[0].x,this.nodes[0].y);
+	this.context.rotate(this.consts[0].calcAngle()-Math.PI/2);
+	this.context.drawImage(headImage,-15,-5,29,38);
+	this.context.restore();
+
+
+
+}
+
+
+
+//----------------------------------------
+
+var ropeImage = new Image();
+ropeImage.src = 'rope.png';
+
+
+var headImage = new Image();
+headImage.src = 'head.png';
+
+var shirtImage = new Image();
+shirtImage.src = 'shirt.png';
+
+var shortsImage = new Image();
+shortsImage.src  = 'shorts.png';
+
+var smokeImage = new Image();
+smokeImage.src = 'smoke.png';
+
+
+var g = null;
+
+var off2 = 0;
+var stp = 0.0;
+var cntx = 0;
+
+
+function init() {
+
+	g = new Group(20,10);
+
+
+var c= 0.5;
+
+g.addNode(0, 105*c,23*c, false);
+g.addNode(1, 53*c,78*c, false);
+g.addNode(2, 104*c,69*c, false);
+g.addNode(3, 153*c,78*c, false);
+g.addNode(4, 33*c,137*c, false);
+g.addNode(5, 27*c,179*c, false);
+g.addNode(6, 182*c,147*c, false);
+g.addNode(7, 182*c,189*c, false);
+g.addNode(8, 104*c,132*c, false);
+g.addNode(9, 72*c,156*c, false);
+g.addNode(10, 137*c,157*c, false);
+g.addNode(11, 141*c,251*c, false);
+g.addNode(12, 135*c,319*c, false);
+g.addNode(13, 166*c,326*c, false);
+g.addNode(14, 71*c,253*c, false);
+g.addNode(15, 73*c,322*c, false);
+g.addNode(16, 49*c,322*c, false);
+
+
+//g.addConst(0,1);
+g.addConst(0,2);
+//g.addConst(0,3);
+g.addConst(1,2);
+g.addConst(2,3);
+g.addConst(1,8);
+g.addConst(2,8);
+g.addConst(3,8);
+g.addConst(1,4);
+g.addConst(4,5);
+g.addConst(3,6);
+g.addConst(6,7);
+g.addConst(8,9);
+g.addConst(8,10);
+g.addConst(9,10);
+g.addConst(9,14);
+g.addConst(14,15);
+g.addConst(15,16);
+//g.addConst(14,16);
+g.addConst(10,11);
+g.addConst(11,12);
+//g.addConst(11,13);
+g.addConst(12,13);
+g.addConst(0,3);
+
+
+
+
+	for (var x = 0; x < 25; x++)
+		g.addNode(x+17,153*c+x*5,78*c,(x==14||x==24?true:false));
+
+	for (var y = 0; y < 24; y++)
+		g.addConst(y+17,y+17+1);
+
+
+g.addConst(3,17);
+
+var off = g.nodes.length;
+
+off2 = g.nodes.length;
+cntx = g.nodes.length;
+//	for (var x = 0; x < 10; x++)  {
+//
+//		var r = Math.random()*Math.PI/20;
+//
+//		g.addNode(x+off,320,100);
+//		g.addNodeVec(x+off, Math.cos(r-Math.PI)*Math.random()*35, Math.sin(r-Math.PI)*Math.random()*35);
+//	}
+
+}
+
+
+
+function play() {
+
+	g.play();
+//	alert(cntx + '   ' + g.nodes.length + '   ' + off2);
+
+	if (Math.floor(Math.random()*2)==1) {
+
+		var r = Math.random()*Math.PI/20;
+
+		g.addNode(cntx,500,100);
+		g.nodes[cntx].x = 500;
+		g.nodes[cntx].y = 100;
+		g.nodes[cntx].dx = 0;
+		g.nodes[cntx].dy = 0;
+		g.nodes[cntx].thickness = 0;
+		g.addNodeVec(cntx, Math.cos(r-Math.PI+stp)*(Math.random()*5+10), Math.sin(r-Math.PI+stp)*(Math.random()*5+10));
+
+		cntx++;
+	if (cntx > 100) cntx = off2;
+
+	}
+
+
+
+	//stp += Math.PI/1000;
+	setTimeout(play,5);
+
+}
+
+function write(str) {
+
+	var d = document.getElementById('test');
+	d.innerHTML = str;
+
+}
+
+
+function movehead(e) {
+
+	var tempX = e.screenX;
+	var tempY = e.screenY;
+
+	g.nodes[0].x = tempX;
+	g.nodes[0].y = tempY;
+
+}
+
+// leva 5, prava 7
+
+</script>
+
+<body onload="init();play();" >
+	<div id="test" style="width:200; height:400; float:right;">tt</div>
+ <canvas id="test-space" width="640" height="480"></canvas>
+</body>
+</html>
